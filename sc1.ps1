@@ -35,28 +35,103 @@ Function executeCommands() {
 
     #change ip address
     Write-Host "Setting IP address, Subnet mask, and Default gateway..."
-    Set-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress $ipaddress -PrefixLength 24 -DefaultGateway $defaultgateway
-    Write-Host "Finished"
+    try{
+        New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress $ipaddress -PrefixLength 24 -DefaultGateway $defaultgateway
+        Write-Host "Finished"
+    }catch [System.SystemException]{"IP or default gateway already exits."}
+
 
     #set DNS addresses
     Write-Host "Setting DNS servers..."
-    Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses $dns1, $dns2
-    Write-Host "Finished"
+    try{
+        Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses $dns1, $dns2
+        Write-Host "Finished"
+    }catch{}
 
     #rename the pc
     Write-Host "Setting Computer Name..."
-    Rename-Computer -NewName $compName
-    Write-Host "Finished"
+    try{
+        Rename-Computer -NewName $compName
+        Write-Host "Finished"
+    }catch{}
 
     #set computer description using a temp var
     Write-Host "Setting Computer Description..."
-    $temp = Get-WmiObject Win32_OperatingSystem
-    $temp.Description = $compDesc
-    $temp.Put()
-    Write-Host "Finished"
+    try{
+        $temp = Get-WmiObject Win32_OperatingSystem
+        $temp.Description = $compDesc
+        $temp.Put()
+        Write-Host "Finished"
+    }catch{}
+    
 
     Remove-Variable temp
-    Write-Host "Process complete!"
+    Write-Host "Changes complete!"
+}
+
+
+Function verifyData() {
+
+$currentIP = (Get-NetIPConfiguration).IPv4Address.IPAddress
+$currentDG = (Get-NetIPConfiguration).IPv4DefaultGateway.NextHop
+$currentDNS = (Get-NetIPConfiguration).DNSServer.ServerAddresses #may have to create list
+#Get-DnsClientServerAddress
+$currentName = (Get-ComputerInfo).CsDNSHostName
+$currentDesc = (Get-WmiObject Win32_OperatingSystem).Description
+$allVerified = $true
+
+Write-Host "Verifying changes made..."
+
+#verify IP change
+if($currentIP -ne $ipaddress)
+{
+    Write-Host "IP not set to $($ipaddress). IP currently set to $($currentIP)."
+    $allVerified = $false
+}
+
+#verify default gateway
+if($currentDG -ne $defaultGateway)
+{
+    Write-Host "Default gateway not set to $($defaultGateway). Currently set to $($currentDG)."
+    $allVerified = $false
+}
+
+#verify DNS
+#need to create list for multiple addresses
+if($currentDG -ne $defaultGateway)
+{
+    Write-Host "DNS not set to $($dns1). Currently set to $($currentDNS)."
+    $allVerified = $false
+}
+
+#verify computer name
+#if($currentName -ne $compName)
+#{
+#    Write-Host "Computer name not set to $($compName). Currently set to $($currentName). Restart required."
+#    $allVerified = $false
+#}
+
+
+#verify computer description
+if($currentDesc -ne $compDesc)
+{
+    Write-Host "Computer description not set to $($compDesc). Currently set to $($currentDesc)."
+    $allVerified = $false
+}
+
+
+if($allVerified)
+{
+    Write-Host "All changes verified"
+}else { Write-Host "Not all changes were verified"}
+
+Remove-Variable currentIP
+Remove-Variable currentDG
+Remove-Variable currentDNS
+Remove-Variable currentName
+Remove-Variable currentDesc
+
+
 }
 
 
@@ -77,6 +152,8 @@ $choices = '&Yes', '&No'
 $decision = $Host.UI.PromptForChoice($title, $prompt, $choices, 1)
 if($decision -eq 0){ executeCommands } else {Break}
 
+verifyData
+
 #remove vars
 Remove-Variable ipaddress
 Remove-Variable defaultGateway
@@ -84,4 +161,5 @@ Remove-Variable dns1
 Remove-Variable dns2
 Remove-Variable compName
 Remove-Variable compDesc
+Write-Host "Proccess Completed"
 Pause
